@@ -1,0 +1,50 @@
+<!doctype html><html><head><title>k4/q WebSocket REPL</title></head>
+<body onload="connect(function(){});">
+<style>
+#in{width:83%;height:60px;float:left;padding:10px;}
+#send{margin-left:10px;width:10%;height:80px;font-weight:bold;}
+#out{width:96%;height:300px;font-family:courier new;padding:10px;border:1px solid gray;margin-top:10px;overflow:auto;}
+</style>
+<textarea id="in" autofocus placeholder="q)"></textarea>
+<input id="send" type="submit" value="Send" onclick="send();">
+<div id="out"></div>
+<script src="c.js"></script><script>
+var ws,cmd="",input=document.getElementById("in"),out=document.getElementById("out");
+function connect(cb){
+    if("WebSocket" in window){
+        ws=new WebSocket("ws://"+window.location.host); ws.binaryType='arraybuffer';
+        out.innerHTML+="Connecting...<br>";
+        ws.onopen=function(e){out.innerHTML+="Connected.<br>"; cb();};
+        ws.onclose=function(e){out.innerHTML+="Disconnected. Send a line or refresh to reconnect.<br>";};
+        ws.onmessage=function(e){
+            var t="",d=deserialize(e.data);
+            if(typeof d==="object"&&d!==null){
+                if(d.length&&typeof d[0]==="object"){
+                    t='<table border="1"><tr>';
+                    for(var x in d[0])t+='<th>'+x+'</th>';
+                    t+='</tr>';
+                    for(var i=0;i<d.length;i++){
+                        t+='<tr>';
+                        for(var x in d[0])t+='<td>'+d[i][x]+'</td>';
+                        t+='</tr>';
+                    }
+                    t+='</table>';
+                }else if(d.length)for(var i=0;i<d.length;i++)t+=d[i]+" ";
+                else for(var x in d)t+=x+" | "+d[x]+"<br>";
+            }else t=d||"";
+            out.innerHTML+=cmd+t+"<br>";
+            out.scrollTop=out.scrollHeight;
+        };
+        ws.onerror=function(e){out.value+=e.data;};
+    }else alert("WebSockets not supported by your browser.");
+}
+function send(){
+    if(ws.readyState!==1)connect(send);
+    else{
+        cmd="q)"+input.value+"<br>";
+        ws.send(input.value);
+        input.value=""; input.focus();
+    }
+    return false;
+}
+</script></body></html>
