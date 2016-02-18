@@ -1,25 +1,25 @@
-<!doctype html><html><head><title>k4/q WebSocket REPL</title></head>
-<body onload="connect(function(){});">
-<style>
-#in{width:83%;height:60px;float:left;padding:10px;}
-#send{margin-left:10px;width:10%;height:80px;font-weight:bold;}
-#out{width:96%;height:300px;font-family:courier new;padding:10px;border:1px solid gray;margin-top:10px;overflow:auto;}
-</style>
-<textarea id="in" autofocus placeholder="q)"></textarea>
-<input id="send" type="submit" value="Send" onclick="send();">
-<div id="out"></div>
-<script src="c.js"></script><script>
-var ws,cmd="",input=document.getElementById("in"),out=document.getElementById("out");
+<html><head><title>kdb+/q Live REPL</title>
+<style>body{font-family:sans-serif;} .CodeMirror{width:50%;height:auto;float:left;border:1px solid #eee;} .output{font-family:courier new,monospace;padding:10px;border:1px solid #eee;overflow:auto;}</style>
+<link rel="stylesheet" href="codemirror/codemirror.css">
+<script src="codemirror/codemirror.js"></script>
+<script src="codemirror/matchbrackets.js"></script>
+<script src="codemirror/vim.js"></script>
+<script src="codemirror/q.js"></script>
+<script src="c.js"></script>
+</head>
+<body onload="connect(function(){});"><textarea id="input" autofocus placeholder="q)" autocomplete="off"></textarea>Live eval of current line:<div id="out" class="output"></div><br><br>Log (Ctrl-Enter to send selection or whole program):<div id="saved" class="output" style="height:50%"></div>
+<script>
+var ws,timeout,save=false,cmd,ed=CodeMirror.fromTextArea(document.getElementById('input'),{lineNumbers:true,matchBrackets:true,mode:'q',keyMap:'vim'}); ed.setSize(null,'100%');
 function connect(cb){
-    if("WebSocket" in window){
-        ws=new WebSocket("ws://"+window.location.host); ws.binaryType='arraybuffer';
-        out.innerHTML+="Connecting...<br>";
-        ws.onopen=function(e){out.innerHTML+="Connected.<br>"; cb();};
-        ws.onclose=function(e){out.innerHTML+="Disconnected. Send a line or refresh to reconnect.<br>";};
+    if('WebSocket' in window){
+        ws=new WebSocket('ws://'+window.location.host); ws.binaryType='arraybuffer';
+        out.innerHTML="Connecting...<br>";
+        ws.onopen=function(e){out.innerHTML="Connected.<br>"; cb();};
+        ws.onclose=function(e){out.innerHTML="Disconnected.<br>";};
         ws.onmessage=function(e){
-            var t="",d=deserialize(e.data);
-            if(typeof d==="object"&&d!==null){
-                if(d.length&&typeof d[0]==="object"){
+            var t='',d=deserialize(e.data);
+            if(typeof d==='object'&&d!==null){
+                if (d.length&&typeof d[0]==='object'){
                     t='<table border="1"><tr>';
                     for(var x in d[0])t+='<th>'+x+'</th>';
                     t+='</tr>';
@@ -29,22 +29,32 @@ function connect(cb){
                         t+='</tr>';
                     }
                     t+='</table>';
-                }else if(d.length)for(var i=0;i<d.length;i++)t+=d[i]+" ";
-                else for(var x in d)t+=x+" | "+d[x]+"<br>";
-            }else t=d||"";
-            out.innerHTML+=cmd+t+"<br>";
-            out.scrollTop=out.scrollHeight;
+                }else if(d.length)for(var i=0;i<d.length;i++)t+=d[i]+' ';
+                else for(var x in d)t+=x+' | '+d[x]+'<br>';
+            }else if(d===null||d===undefined)return;
+            else t+=d;
+            if(save){
+                saved.innerHTML+=t+'<br>'; save=false; // TODO: Flag does not reset properly when kdb+ does not respond with a message (e.g., when setting a variable or when a trailing newline creates an empty semicolon)
+                saved.scrollTop=saved.scrollHeight;
+            }else out.innerHTML=t+'<br>';
         };
-        ws.onerror=function(e){out.value+=e.data;};
-    }else alert("WebSockets not supported by your browser.");
+        ws.onerror=function(e){out.value=e.data;};
+    }else alert('WebSockets not supported by your browser.');
 }
-function send(){
-    if(ws.readyState!==1)connect(send);
-    else{
-        cmd="q)"+input.value+"<br>";
-        ws.send(input.value);
-        input.value=""; input.focus();
+function send(m){ws.send(m.replace(/\n$/,'').replace(/\n/g,';'));}
+window.onkeydown=function(e){
+    if((event.keyCode===10||event.keyCode===13)&&event.ctrlKey){
+        cmd=ed.doc.getSelection(); send(cmd);
+        saved.innerHTML+='q)'+cmd.replace(/\n/g,'<br>&nbsp;&nbsp;')+'<br>';
+        cmd=''; save=true;
     }
-    return false;
 }
+window.onkeyup=function(){
+    clearTimeout(timeout);
+    timeout=setTimeout(function(){
+        var s=ed.doc.getLine(ed.doc.getCursor().line); timeout=null; // Or send the whole buffer with ed.doc.getValue(), because variable assignment can be missed with fast typing?
+        if(ws.readyState!==1)connect(function(){send(s)});
+        else send(s);
+    },250); // Fairly dangerous to run (incomplete) code live this fast, especially if it impacts real data
+};
 </script></body></html>
